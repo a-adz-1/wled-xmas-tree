@@ -1,0 +1,241 @@
+// Generated from web/designer.html by tools/embed_page.py - do not edit by hand
+#pragma once
+static const char XT_PAGE_HTML[] PROGMEM = R"XTPAGE(<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tree Designer</title>
+<style>
+:root{--bg:#0d1512;--panel:#16221d;--line:#25362e;--ink:#e9efe9;--dim:#8fa399;--accent:#e0b04a;--red:#c8333d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0;font-weight:600}
+header h1 span{color:var(--accent)}
+#status{color:var(--dim);font-size:13px}
+main{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:16px;max-width:1100px;margin:auto}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 10px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+button,select,label.btn{background:#20302a;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px 10px;font:inherit;cursor:pointer}
+button:hover,label.btn:hover{border-color:#3c5449}
+button.on{background:#2f4a3e;border-color:var(--accent)}
+button.primary{background:var(--accent);color:#1b1404;border-color:var(--accent);font-weight:600}
+button.go{background:var(--red);border-color:var(--red);font-weight:600}
+.sw{width:24px;height:24px;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0}
+.sw.on{border-color:#fff}
+input[type=color]{width:34px;height:28px;border:1px solid var(--line);border-radius:6px;background:none;padding:0}
+#grid{touch-action:none;image-rendering:pixelated;border-radius:6px;background:#000;display:block;cursor:crosshair}
+#tree{display:block;width:100%;max-width:520px;margin:auto;border-radius:8px;background:radial-gradient(#101c17,#060a08)}
+.hint{color:var(--dim);font-size:12px;margin-top:6px;max-width:360px}
+input[type=range]{width:140px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#24372e;border:1px solid var(--accent);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none}
+</style>
+</head>
+<body>
+<header><h1>🎄 Tree <span>Designer</span></h1><div id="status">loading tree…</div></header>
+<main>
+<section>
+<h2>Draw</h2>
+<div class="row" id="tools">
+<button data-t="pen" class="on">✏️ Pen</button><button data-t="fill">🪣 Fill</button>
+<button data-t="erase">🧽 Erase</button><button data-t="pick">💧 Pick</button>
+<button id="undo">↶ Undo</button><button id="clear">Clear</button>
+</div>
+<div class="row" id="swatches"></div>
+<canvas id="grid"></canvas>
+<div class="row" style="margin-top:10px">
+<select id="tpl"><option value="">Add a picture…</option></select>
+<button id="txt">Aa Text</button>
+<label class="btn">🖼 Image<input id="img" type="file" accept="image/*" hidden></label>
+</div>
+<div class="hint">32 × 48 pixels, drawn as the tree looks from the front: keep inside the dotted outline. Black = background (colour 2 of the effect). Tick “Wrap all round” for patterns that go right round the tree.</div>
+</section>
+<section>
+<h2>Preview</h2>
+<canvas id="tree" width="520" height="620"></canvas>
+<div class="row" style="justify-content:center;margin-top:8px">
+<label>Turn <input id="turn" type="range" min="0" max="255" value="0"></label>
+<label><input id="wrap" type="checkbox"> Wrap all round</label>
+<label><input id="spin" type="checkbox"> Spin</label>
+<select id="view"><option value="pic">Picture</option><option value="layout">Layout check</option></select>
+</div>
+<div class="row" style="justify-content:center">
+<button id="load">⬇ Load from tree</button>
+<button id="save" class="primary">💾 Save to tree</button>
+<button id="show" class="go">✨ Save &amp; show</button>
+</div>
+<div class="row" style="justify-content:center;margin-top:6px">
+<button id="presets">🎁 Install Christmas presets + playlist</button>
+</div>
+<div class="hint" style="text-align:center">The preview uses your tree's real LED positions, so you can see how much detail will show.</div>
+</section>
+</main>
+<div id="toast"></div>
+<script>
+"use strict";
+const W=32,H=48;
+let pic=new Uint8Array(W*H*3), undoStack=[], tool="pen", color=[220,30,40];
+let tmap=null, demo=false;
+const $=id=>document.getElementById(id);
+const toast=m=>{const t=$("toast");t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2200)};
+// ---------- palette ----------
+const SW=[[220,30,40],[20,150,40],[255,176,0],[255,255,255],[40,90,255],[255,90,170],[255,110,0],[150,60,220],[120,70,30],[0,0,0]];
+const hex=c=>"#"+c.map(v=>v.toString(16).padStart(2,"0")).join("");
+function buildSwatches(){
+const s=$("swatches");
+SW.forEach(c=>{const b=document.createElement("button");b.className="sw";b.style.background=hex(c);b.onclick=()=>setColor(c);s.appendChild(b)});
+const cp=document.createElement("input");cp.type="color";cp.value=hex(color);cp.oninput=e=>{const v=e.target.value;setColor([1,3,5].map(i=>parseInt(v.substr(i,2),16)))};s.appendChild(cp);s._cp=cp;
+setColor(color);
+}
+function setColor(c){color=c.slice();const s=$("swatches");[...s.querySelectorAll(".sw")].forEach((b,i)=>b.classList.toggle("on",SW[i]&&SW[i].join()==c.join()));if(s._cp)s._cp.value=hex(c)}
+// ---------- grid ----------
+const G=$("grid"),gx=G.getContext("2d");let CELL=10;
+function sizeGrid(){CELL=Math.max(6,Math.min(11,Math.floor((Math.min(innerWidth-60,420))/W)));G.width=W*CELL;G.height=H*CELL;drawGrid()}
+function getPx(x,y){const i=(y*W+x)*3;return[pic[i],pic[i+1],pic[i+2]]}
+function setPx(x,y,c){if(x<0||y<0||x>=W||y>=H)return;const i=(y*W+x)*3;pic[i]=c[0];pic[i+1]=c[1];pic[i+2]=c[2]}
+function drawGrid(){
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){const c=getPx(x,y);gx.fillStyle=`rgb(${c})`;gx.fillRect(x*CELL,y*CELL,CELL,CELL)}
+gx.strokeStyle="rgba(255,255,255,.06)";gx.beginPath();
+for(let x=0;x<=W;x++){gx.moveTo(x*CELL+.5,0);gx.lineTo(x*CELL+.5,H*CELL)}
+for(let y=0;y<=H;y++){gx.moveTo(0,y*CELL+.5);gx.lineTo(W*CELL,y*CELL+.5)}
+gx.stroke();
+// tree outline guide (front view of a cone)
+gx.strokeStyle="rgba(224,176,74,.35)";gx.setLineDash([4,4]);gx.beginPath();gx.moveTo(W*CELL/2,0);gx.lineTo(0,H*CELL);gx.moveTo(W*CELL/2,0);gx.lineTo(W*CELL,H*CELL);gx.stroke();gx.setLineDash([]);
+}
+function pushUndo(){undoStack.push(pic.slice());if(undoStack.length>40)undoStack.shift()}
+function flood(x,y,c){const t=getPx(x,y).join();if(t==c.join())return;const st=[[x,y]];while(st.length){const[a,b]=st.pop();if(a<0||b<0||a>=W||b>=H||getPx(a,b).join()!=t)continue;setPx(a,b,c);st.push([a+1,b],[a-1,b],[a,b+1],[a,b-1])}}
+let drawing=false,last=null;
+function cellAt(e){const r=G.getBoundingClientRect();return[Math.floor((e.clientX-r.left)/r.width*W),Math.floor((e.clientY-r.top)/r.height*H)]}
+function lineTo(a,b,c){let[x0,y0]=a;const[x1,y1]=b;const dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let e=dx+dy;for(;;){setPx(x0,y0,c);if(x0==x1&&y0==y1)break;const e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}}
+G.addEventListener("pointerdown",e=>{const p=cellAt(e);
+if(tool=="pick"){setColor(getPx(...p));return}
+pushUndo();
+if(tool=="fill"){flood(...p,color);changed();return}
+drawing=true;last=p;G.setPointerCapture(e.pointerId);setPx(...p,tool=="erase"?[0,0,0]:color);changed()});
+G.addEventListener("pointermove",e=>{if(!drawing)return;const p=cellAt(e);lineTo(last,p,tool=="erase"?[0,0,0]:color);last=p;changed()});
+addEventListener("pointerup",()=>drawing=false);
+function changed(){drawGrid()}
+$("tools").onclick=e=>{const t=e.target.dataset.t;if(!t)return;tool=t;[...$("tools").querySelectorAll("[data-t]")].forEach(b=>b.classList.toggle("on",b.dataset.t==t))};
+$("undo").onclick=()=>{if(undoStack.length){pic=undoStack.pop();drawGrid()}};
+$("clear").onclick=()=>{pushUndo();pic.fill(0);drawGrid()};
+// ---------- built-in pictures (drawn with simple shapes, centred on the front of the tree) ----------
+const off=document.createElement("canvas");off.width=W;off.height=H;const ox=off.getContext("2d");
+function stamp(fn){pushUndo();ox.clearRect(0,0,W,H);ox.imageSmoothingEnabled=false;fn(ox);const d=ox.getImageData(0,0,W,H).data;
+for(let i=0;i<W*H;i++){if(d[i*4+3]>110){pic[i*3]=d[i*4];pic[i*3+1]=d[i*4+1];pic[i*3+2]=d[i*4+2]}}drawGrid()}
+const C=(g,c)=>g.fillStyle=c, circ=(g,x,y,r)=>{g.beginPath();g.arc(x,y,r,0,7);g.fill()}, poly=(g,p)=>{g.beginPath();p.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.fill()};
+const TPL={
+"Bell":g=>{C(g,"#ffb000");poly(g,[[16,12],[21,15],[22,24],[25,31],[7,31],[10,24],[11,15]]);C(g,"#c27a00");g.fillRect(7,30,18,2);C(g,"#ffe08a");circ(g,16,34,2.4);C(g,"#d0202a");poly(g,[[16,11],[10,7],[10,13]]);poly(g,[[16,11],[22,7],[22,13]]);circ(g,16,11,1.6)},
+"Star":g=>{C(g,"#ffd23a");const p=[];for(let i=0;i<10;i++){const r=i%2?5.5:13,a=-Math.PI/2+i*Math.PI/5;p.push([16+r*Math.cos(a),24+r*Math.sin(a)])}poly(g,p)},
+"Snowman":g=>{C(g,"#ffffff");circ(g,16,35,8);circ(g,16,22,5.5);C(g,"#111");g.fillRect(11,13,10,2);g.fillRect(13,7,6,6);C(g,"#ff7a00");poly(g,[[16,22],[21,23],[16,24]]);C(g,"#d0202a");g.fillRect(12,27,9,2);C(g,"#000");g.fillRect(14,20,1,1);g.fillRect(17,20,1,1)},
+"Heart":g=>{C(g,"#e0203a");circ(g,12,20,5.5);circ(g,20,20,5.5);poly(g,[[6.8,22],[25.2,22],[16,33]])},
+"Present":g=>{C(g,"#2050e0");g.fillRect(8,20,16,15);C(g,"#ffd23a");g.fillRect(15,20,3,15);g.fillRect(8,26,16,3);poly(g,[[16,20],[10,14],[11,20]]);poly(g,[[17,20],[23,14],[22,20]])},
+"Candy cane":g=>{g.lineWidth=3.2;g.lineCap="round";g.strokeStyle="#fff";g.beginPath();g.arc(13,14,5,Math.PI,0);g.lineTo(18,38);g.stroke();g.strokeStyle="#e0101e";g.setLineDash([2.5,2.5]);g.beginPath();g.arc(13,14,5,Math.PI,0);g.lineTo(18,38);g.stroke();g.setLineDash([])},
+"Snowflake":g=>{g.strokeStyle="#bfe6ff";g.lineWidth=1.4;g.lineCap="round";for(let i=0;i<6;i++){const a=i*Math.PI/3;g.beginPath();g.moveTo(16,24);g.lineTo(16+11*Math.cos(a),24+11*Math.sin(a));for(const r of[5,8]){g.moveTo(16+r*Math.cos(a),24+r*Math.sin(a));g.lineTo(16+(r+3)*Math.cos(a+.5),24+(r+3)*Math.sin(a+.5));g.moveTo(16+r*Math.cos(a),24+r*Math.sin(a));g.lineTo(16+(r+3)*Math.cos(a-.5),24+(r+3)*Math.sin(a-.5))}g.stroke()}},
+"Reindeer":g=>{C(g,"#8a5a2b");circ(g,16,26,6);circ(g,16,33,4.5);g.strokeStyle="#c08040";g.lineWidth=1.6;g.beginPath();g.moveTo(12,21);g.lineTo(8,13);g.lineTo(5,11);g.moveTo(8,14);g.lineTo(9,9);g.moveTo(20,21);g.lineTo(24,13);g.lineTo(27,11);g.moveTo(24,14);g.lineTo(23,9);g.stroke();C(g,"#ff1020");circ(g,16,35,2);C(g,"#000");g.fillRect(13,25,2,2);g.fillRect(18,25,2,2)},
+"Stripes (red/white)":g=>{for(let y=-W;y<H;y+=6){C(g,"#e01020");poly(g,[[0,y],[W,y+W*.6],[W,y+W*.6+3],[0,y+3]]);C(g,"#ffffff");poly(g,[[0,y+3],[W,y+W*.6+3],[W,y+W*.6+6],[0,y+6]])}},
+"Green tree fill":g=>{C(g,"#0a6a20");g.fillRect(0,0,W,H);C(g,"#ffd23a");for(let i=0;i<22;i++)g.fillRect((i*13+5)%W,(i*7+3)%H,1,1);C(g,"#e02030");for(let i=0;i<18;i++)g.fillRect((i*17+9)%W,(i*11+6)%H,1,1)},
+};
+for(const k in TPL){const o=document.createElement("option");o.textContent=k;$("tpl").appendChild(o)}
+$("tpl").onchange=e=>{const f=TPL[e.target.value];if(f)stamp(f);e.target.value=""};
+$("txt").onclick=()=>{const t=prompt("Text to add (short words work best, e.g. NOEL, JOY, 2026):","JOY");if(!t)return;
+stamp(g=>{const lines=t.toUpperCase().split(/\s+/).slice(0,4);g.fillStyle=hex(color);g.textAlign="center";g.textBaseline="middle";
+const size=lines.length>2?8:10;g.font=`bold ${size}px monospace`;lines.forEach((l,i)=>g.fillText(l,16,24+(i-(lines.length-1)/2)*(size+1),W))})};
+$("img").onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{pushUndo();ox.clearRect(0,0,W,H);ox.imageSmoothingEnabled=true;
+const s=Math.max(W/im.width,H/im.height),w=im.width*s,h=im.height*s;ox.drawImage(im,(W-w)/2,(H-h)/2,w,h);const d=ox.getImageData(0,0,W,H).data;
+for(let i=0;i<W*H;i++){pic[i*3]=d[i*4];pic[i*3+1]=d[i*4+1];pic[i*3+2]=d[i*4+2]}drawGrid();URL.revokeObjectURL(im.src)};im.src=URL.createObjectURL(f);e.target.value=""};
+// ---------- tree map ----------
+function demoMap(){const px=[],R=15,L=60;for(let r=0;r<R;r++){const a=Math.round(((r+.5)/R)*256)&255;for(let j=0;j<L;j++){const pos=j/(L-1),h=Math.round((r%2?1-pos:pos)*255);px.push([h,a,1,r])}}for(let s=0;s<20;s++)px.push([255,Math.round(s*256/20)&255,2,Math.round(s*255/19)]);return{n:px.length,runs:R,aspect:20,px}}
+async function loadMap(){
+try{const r=await fetch("/xmastree/map");const j=await r.json();const px=[];for(let i=0;i<j.n;i++){const o=i*8,v=k=>parseInt(j.px.substr(o+k*2,2),16);px.push([v(0),v(1),v(2),v(3)])}
+tmap={n:j.n,runs:j.runs,aspect:j.aspect||20,px};
+const tree=px.filter(p=>p[2]==1).length,star=px.filter(p=>p[2]==2).length;
+$("status").textContent=j.err?("⚠ "+j.err):`${tree} tree LEDs · ${star} star LEDs · ${["strings","spiral","custom map"][j.layout]||""}`;
+}catch(e){tmap=demoMap();demo=true;$("status").textContent="Not connected to WLED: showing a demo tree (15 strings × 60 LEDs)"}
+}
+// ---------- preview (same maths as the Tree Picture effect) ----------
+const T=$("tree"),tx=T.getContext("2d");
+function sample(p,front,wrap){
+const[h,a]=p;let x;
+if(!wrap){let da=((a-front+128)&255)-128;if(da<-64||da>=64)return null;const s=Math.sin(da*2*Math.PI/256)*(1-h/255);x=Math.floor((s+1)*.5*(W-1)+.5)}
+else x=Math.floor((((a-front)&255)*W)/256);
+const y=Math.floor((255-h)*(H-1)/255);return getPx(x,y)}
+function drawTree(){
+if(!tmap)return;const w=T.width,h=T.height,base=h-40,top=60,height=base-top,halfW=height/((tmap.aspect||20)/10)/2;
+tx.clearRect(0,0,w,h);
+const spin=$("spin").checked?(performance.now()/40)&255:0, view=+$("turn").value, front=(view)&255, wrap=$("wrap").checked;
+// effect turns the picture by "Turn" (+spin); we look at the tree from the front of the picture
+const items=[];
+for(const p of tmap.px){
+if(p[2]==0)continue;
+let col;
+if($("view").value=="layout"){col=p[2]==2?[255,208,0]:hsl((p[3]*47)%256)}
+else if(p[2]==2){col=[255,176,0]}
+else{col=sample(p,(front+spin)&255,wrap)||[0,0,0];if(col.join()=="0,0,0")col=[18,26,22]}
+const ang=(((p[1]-front-spin)&255))/256*2*Math.PI, r=(1-p[0]/255)*halfW;
+const sx=w/2+Math.sin(ang)*r, depth=Math.cos(ang);
+const sy=p[2]==2?top-18+Math.sin(p[1]/256*2*Math.PI)*12:base-p[0]/255*height;
+const sxs=p[2]==2?w/2+Math.cos(p[1]/256*2*Math.PI)*12:sx;
+items.push([depth,sxs,sy,col,p[2]==2]);
+}
+items.sort((a,b)=>a[0]-b[0]);
+for(const[d,x,y,c,star]of items){const k=star?1:(.35+.65*(d+1)/2);tx.fillStyle=`rgb(${c.map(v=>Math.round(v*k))})`;
+const r=star?4:2.4+d*.6;tx.shadowColor=`rgb(${c})`;tx.shadowBlur=d>0||star?6:0;tx.beginPath();tx.arc(x,y,r,0,7);tx.fill()}
+tx.shadowBlur=0;
+}
+function hsl(h){const f=n=>{const k=(n+h/256*12)%12;return Math.round(255*(.5-.45*Math.max(-1,Math.min(k-3,9-k,1))))};return[f(0),f(8),f(4)]}
+function loop(){drawTree();requestAnimationFrame(loop)}
+// ---------- talk to WLED ----------
+async function savePic(){const r=await fetch("/xmastree/pic",{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:pic});if(!r.ok)throw new Error(r.status);}
+$("save").onclick=async()=>{if(demo)return toast("Open this page from your WLED device to save");try{await savePic();toast("Saved to the tree ✔")}catch(e){toast("Save failed: "+e.message)}};
+$("show").onclick=async()=>{if(demo)return toast("Open this page from your WLED device to save");
+try{await savePic();const eff=await(await fetch("/json/eff")).json();const fx=eff.indexOf("Tree Picture");if(fx<0)throw new Error("Tree Picture effect not found");
+await fetch("/json/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({on:true,seg:[{fx,c1:+$("turn").value,sx:$("spin").checked?40:0,o1:$("wrap").checked}]})});
+toast("Showing on the tree ✨")}catch(e){toast("Failed: "+e.message)}};
+$("load").onclick=async()=>{try{const r=await fetch("/xmastree/pic");if(!r.ok)throw new Error("no picture saved yet");const b=new Uint8Array(await r.arrayBuffer());if(b.length==pic.length){pushUndo();pic.set(b);drawGrid();toast("Loaded")}}catch(e){toast(e.message)}};
+// ---------- one-click preset pack ----------
+const PRESETS=[
+["Tree: C9 twinkle","Tree Twinkle",{sx:80,ix:140,pal:48}],
+["Tree: Warm fairy lights","Tree Twinkle",{sx:60,ix:160,o1:true}],
+["Tree: Candy cane","Tree Candy Cane",{sx:60,ix:96,c1:96,c2:110}],
+["Tree: Rainbow spiral","Tree Spiral",{sx:80,ix:64,c1:96,c2:128,pal:11}],
+["Tree: Snowfall","Tree Snowfall",{sx:90,ix:100,c1:80,c2:64,col:[[255,255,255],[0,0,24],[0,0,0]]}],
+["Tree: Baubles","Tree Ornaments",{sx:100,ix:90,pal:48,col:[[255,0,0],[0,40,0],[0,0,0]]}],
+["Tree: Shooting stars","Tree Shooting Stars",{sx:110,ix:80,c1:100,pal:11,col:[[255,255,255],[0,0,0],[0,0,0]]}],
+["Tree: Fireworks","Tree Fireworks",{sx:120,ix:128,c1:120,pal:11,col:[[255,255,255],[0,0,0],[0,0,0]]}],
+["Tree: Star burst","Tree Star Burst",{sx:128,pal:31}],
+["Tree: Gift wrap","Tree Gift Wrap",{sx:20,ix:60,c1:60}],
+["Tree: Christmas rising","Tree Rising Colours",{sx:100,ix:48,pal:31}],
+["Tree: Christmas rotate","Tree Rotate",{sx:90,ix:64,c1:60,pal:31}],
+["Tree: Picture","Tree Picture",{sx:0,c1:0}],
+];
+const PS_FIRST=200, PS_LIST=230;
+$("presets").onclick=async()=>{
+if(demo)return toast("Open this page from your WLED device to install presets");
+if(!confirm(`This saves ${PRESETS.length} presets in slots ${PS_FIRST}-${PS_FIRST+PRESETS.length-1} and a playlist in slot ${PS_LIST}, replacing anything already in those slots. Continue?`))return;
+try{
+const eff=await(await fetch("/json/eff")).json();
+const post=b=>fetch("/json/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+const ids=[];
+for(let i=0;i<PRESETS.length;i++){
+const[name,fxName,o]=PRESETS[i];const fx=eff.indexOf(fxName);if(fx<0)throw new Error(fxName+" not found");
+const seg=Object.assign({fx,o1:false,o2:false,o3:false},o);
+await post({on:true,seg:[seg]});
+await new Promise(r=>setTimeout(r,300));
+await post({psave:PS_FIRST+i,n:name,ib:true,sb:true});
+await new Promise(r=>setTimeout(r,900));      // WLED writes presets in the background
+ids.push(PS_FIRST+i);toast(`Saved ${i+1}/${PRESETS.length}`);
+}
+const show=ids.slice(0,-1);   // the picture is left out of the rotation
+await post({psave:PS_LIST,n:"Tree: Christmas show",o:true,playlist:{ps:show,dur:show.map(()=>1800),transition:show.map(()=>15),repeat:0}});
+toast("Presets and the 'Christmas show' playlist are installed 🎄");
+}catch(e){toast("Failed: "+e.message)}
+};
+buildSwatches();sizeGrid();addEventListener("resize",sizeGrid);
+stamp(TPL["Bell"]);undoStack=[];
+loadMap().then(loop);
+</script>
+</body>
+</html>)XTPAGE";
